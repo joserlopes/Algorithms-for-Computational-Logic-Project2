@@ -41,7 +41,7 @@ The overall performance of students in project2 using the set of holdout tests c
 
 
 ```
-python3 project1.py < test1.ttp > test1.myout 
+python3 project2.py < test1.ttp > test1.myout 
 ```
 
 
