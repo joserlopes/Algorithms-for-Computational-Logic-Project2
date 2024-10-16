@@ -1,0 +1,10 @@
+*
+!.gitignore
+!.gitlab-ci.yml
+!**.md
+!**.py
+!public-tests/
+!public-test/*.ttp
+!public-test/*.out
+!public-test/Makefile
+
