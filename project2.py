@@ -4,25 +4,17 @@
 
 import sys
 from z3 import (
-    Solver,
     Bool,
-    Int,
     sat,
     Or,
-    And,
     Optimize,
     Not,
     Implies,
-    Function,
-    BoolSort,
-    IntSort,
-    ForAll,
-    PbEq,
     Sum,
     If,
 )
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 base_city = None
 n_cities = 0
@@ -132,7 +124,6 @@ def date_difference(dateA, dateB):
 parse()
 
 variables = []
-f_nights = Function("f_nights", IntSort(), IntSort())
 
 # The traveler has left city i
 for i in range(n_cities):
@@ -241,13 +232,13 @@ def get_blocking_clause(model, xs):
 
 
 solutions = []
-if solver.check() == sat:
+price = []
+
+def pretty_print_solution(solution):
     total_price = 0
     chosen_flights = ""
-    model = solver.model()
-    solution = [model.evaluate(x) for x in variables]
     for i in range(n_cities * 2, len(variables)):
-        if model.evaluate(variables[i]):
+        if solution[i]:
             flight = flights[i - n_cities * 2]
             date, og_city, dest_city, dep_time, flight_price = (
                 flight["date"],
@@ -260,8 +251,24 @@ if solver.check() == sat:
             chosen_flights += (
                 f"{date} {og_city} {dest_city} {dep_time} {flight_price}\n"
             )
+    price.append(total_price)
     print(f"{total_price}\n{chosen_flights}".strip())
+
+def process_solutions(solution):
+    total_price = 0
+    for i in range(n_cities * 2, len(variables)):
+        if solution[i]:
+            flight = flights[i - n_cities * 2]
+            total_price += flight["price"]
+    price.append(total_price)
+
+while solver.check() == sat:
+    model = solver.model()
+    solution = [model.evaluate(x) for x in variables]
+    # pretty_print_solution(solution)
+    process_solutions(solution)
     solutions.append(solution)
     solver.add(get_blocking_clause(model, variables))
-else:
-    print("Instance is unsatisfiable")
+
+min_solution = price.index(min(price))
+pretty_print_solution(solutions[min_solution])
