@@ -195,20 +195,20 @@ for i in range(n_flights):
     else:
         same_date[dateA].append(variables[idA])
 
-    # # I can't be leaving cities other than base at the first day...
-    # if min_nightsA != 0 and dateA == first_day:
-    #     solver.add(Not(variables[idA]))
-    #
-    # # I can't be leaving the base city at the last day...
-    # if min_nightsA == 0 and dateA == last_day:
-    #     solver.add(Not(variables[idA]))
-    #
-    # # If k nights haven't passed, I can't be going back to base
-    # if (
-    #     dest_city["min_nights"] == 0
-    #     and date_difference(dateA, first_day).days < min_n_nights
-    # ):
-    #     solver.add(Not(variables[idA]))
+    # I can't be leaving cities other than base at the first day...
+    if min_nightsA != 0 and dateA == first_day:
+        solver.add(Not(variables[idA]))
+
+    # I can't be leaving the base city at the last day...
+    if min_nightsA == 0 and dateA == last_day:
+        solver.add(Not(variables[idA]))
+
+    # If k nights haven't passed, I can't be going back to base
+    if (
+        dest_city["min_nights"] == 0
+        and date_difference(dateA, first_day).days < min_n_nights
+    ):
+        solver.add(Not(variables[idA]))
 
     # # If I'm leaving base city, make sure to have at least n_nigths nights left
     # if min_nightsA == 0 and date_difference(last_day, dateA).days < max_n_nights:
