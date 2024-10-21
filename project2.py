@@ -5,6 +5,7 @@
 import sys
 from z3 import (
     Bool,
+    Int,
     sat,
     Or,
     Optimize,
@@ -19,7 +20,8 @@ from datetime import datetime
 base_city = None
 n_cities = 0
 n_flights = 0
-n_nights = 0
+min_n_nights = 0
+max_n_nights = 0
 cities = []
 flights = []
 
@@ -30,7 +32,8 @@ def parse():
     global base_city
     global n_cities
     global n_flights
-    global n_nights
+    global min_n_nights
+    global max_n_nights
     lines = []
 
     for line in sys.stdin:
@@ -59,7 +62,8 @@ def parse():
                 "id": id,
             }
         )
-        n_nights += int(info[2])
+        min_n_nights += int(info[2])
+        max_n_nights += int(info[3])
     n_flights = int(lines[2 + n_cities - 1])
     for flight, id in zip(
         lines[2 + n_cities : 2 + n_cities + n_flights], range(1, n_flights + 1)
@@ -137,6 +141,7 @@ for i in range(n_cities):
 for i in range(n_flights):
     variables += [Bool(f"f_{i}")]
 
+priceVar = Int("price")
 
 solver = Optimize()
 
@@ -155,6 +160,8 @@ for i in range(n_cities + 1, n_cities * 2):
 same_og = {}
 same_dest = {}
 same_date = {}
+first_day = flights[0]["date"]
+last_day = flights[-1]["date"]
 for i in range(n_flights):
     flightA = flights[i]
     idA = flightA["id"] + n_cities * 2 - 1
@@ -163,6 +170,10 @@ for i in range(n_flights):
     dateA = flightA["date"]
     og_city_clause = airport_to_clause(og_airport)
     dest_city_clause = airport_to_clause(dest_airport) + n_cities
+    dest_city = airport_to_city(dest_airport)
+    cityA = airport_to_city(og_airport)
+    min_nightsA = cityA["min_nights"]
+    max_nightsA = cityA["max_nights"]
 
     # If I have left city i then ci must be true
     solver.add(Implies(variables[idA], variables[og_city_clause]))
@@ -183,6 +194,26 @@ for i in range(n_flights):
         same_date[dateA] = [variables[idA]]
     else:
         same_date[dateA].append(variables[idA])
+
+    # # I can't be leaving cities other than base at the first day...
+    # if min_nightsA != 0 and dateA == first_day:
+    #     solver.add(Not(variables[idA]))
+    #
+    # # I can't be leaving the base city at the last day...
+    # if min_nightsA == 0 and dateA == last_day:
+    #     solver.add(Not(variables[idA]))
+    #
+    # # If k nights haven't passed, I can't be going back to base
+    # if (
+    #     dest_city["min_nights"] == 0
+    #     and date_difference(dateA, first_day).days < min_n_nights
+    # ):
+    #     solver.add(Not(variables[idA]))
+
+    # # If I'm leaving base city, make sure to have at least n_nigths nights left
+    # if min_nightsA == 0 and date_difference(last_day, dateA).days < max_n_nights:
+    #     solver.add(Not(variables[idA]))
+
     for j in range(i + 1, n_flights):
         flightB = flights[j]
         idB = flightB["id"] + n_cities * 2 - 1
@@ -205,10 +236,10 @@ for i in range(n_flights):
 
 
 for x in same_og.values():
-    solver.add(Sum(x) <= 1)
+    solver.add(Sum(x) == 1)
 
 for x in same_dest.values():
-    solver.add(Sum(x) <= 1)
+    solver.add(Sum(x) == 1)
 
 for x in same_date.values():
     solver.add(Sum(x) <= 1)
@@ -218,7 +249,7 @@ solver.add(Sum(variables[n_cities * 2 :]) == n_cities)
 flight_price_weights = []
 for i in range(n_cities * 2, len(variables)):
     price = flights[i - n_cities * 2]["price"]
-    flight_price_weights.append(If(variables[i], price, price))
+    flight_price_weights.append(If(variables[i], price, 0))
 
 solver.minimize(Sum(flight_price_weights))
 
@@ -233,6 +264,7 @@ def get_blocking_clause(model, xs):
 
 solutions = []
 price = []
+
 
 def pretty_print_solution(solution):
     total_price = 0
@@ -254,6 +286,7 @@ def pretty_print_solution(solution):
     price.append(total_price)
     print(f"{total_price}\n{chosen_flights}".strip())
 
+
 def process_solutions(solution):
     total_price = 0
     for i in range(n_cities * 2, len(variables)):
@@ -262,13 +295,14 @@ def process_solutions(solution):
             total_price += flight["price"]
     price.append(total_price)
 
-while solver.check() == sat:
+
+if solver.check() == sat:
     model = solver.model()
     solution = [model.evaluate(x) for x in variables]
-    # pretty_print_solution(solution)
-    process_solutions(solution)
-    solutions.append(solution)
-    solver.add(get_blocking_clause(model, variables))
+    pretty_print_solution(solution)
+    # process_solutions(solution)
+    # solutions.append(solution)
+    # solver.add(get_blocking_clause(model, variables))
 
-min_solution = price.index(min(price))
-pretty_print_solution(solutions[min_solution])
+# min_solution = price.index(min(price))
+# pretty_print_solution(solutions[min_solution])
