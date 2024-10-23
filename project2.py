@@ -4,6 +4,7 @@
 
 import sys
 from z3 import (
+    And,
     Bool,
     Int,
     sat,
@@ -141,7 +142,10 @@ for i in range(n_cities):
 for i in range(n_flights):
     variables += [Bool(f"f_{i}")]
 
-priceVar = Int("price")
+n_nights = []
+
+for i in range(n_cities):
+    n_nights += [Int(f"n_{i}")]
 
 solver = Optimize()
 
@@ -157,6 +161,11 @@ for i in range(1, n_cities):
 for i in range(n_cities + 1, n_cities * 2):
     solver.add(Implies(variables[n_cities], variables[i]))
 
+for i in range(n_cities):
+    min_nights = cities[i]["min_nights"]
+    max_nights = cities[i]["max_nights"]
+    solver.add(And(min_nights <= n_nights[i], n_nights[i] <= max_nights))
+
 same_og = {}
 same_dest = {}
 same_date = {}
@@ -170,6 +179,7 @@ for i in range(n_flights):
     dateA = flightA["date"]
     og_city_clause = airport_to_clause(og_airport)
     dest_city_clause = airport_to_clause(dest_airport) + n_cities
+    dest_city_nights = airport_to_clause(dest_airport)
     dest_city = airport_to_city(dest_airport)
     cityA = airport_to_city(og_airport)
     min_nightsA = cityA["min_nights"]
@@ -210,10 +220,6 @@ for i in range(n_flights):
     ):
         solver.add(Not(variables[idA]))
 
-    # # If I'm leaving base city, make sure to have at least n_nigths nights left
-    # if min_nightsA == 0 and date_difference(last_day, dateA).days < max_n_nights:
-    #     solver.add(Not(variables[idA]))
-
     for j in range(i + 1, n_flights):
         flightB = flights[j]
         idB = flightB["id"] + n_cities * 2 - 1
@@ -226,13 +232,15 @@ for i in range(n_flights):
             ):
                 solver.add(Implies(variables[idA], Not(variables[idB])))
             # If I take a flight to city A, then a flight from city A that is not k nights after can't be true
-            min_nightsB = airport_to_city(dest_airport)["min_nights"]
-            max_nightsB = airport_to_city(dest_airport)["max_nights"]
+            nights = n_nights[dest_city_nights]
+            date_diff = (
+                datetime.strptime(flightB["date"], date_format)
+                - datetime.strptime(flightA["date"], date_format)
+            ).days
             if flightA["dest_airport"] == flightB["og_airport"]:
-                if not between_k_nights(
-                    flightB["date"], min_nightsB, max_nightsB, flightA["date"]
-                ):
-                    solver.add(Implies(variables[idA], Not(variables[idB])))
+                solver.add(
+                    Implies(And(variables[idA], variables[idB]), nights == date_diff)
+                )
 
 
 for x in same_og.values():
