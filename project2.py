@@ -4,11 +4,9 @@
 
 import sys
 from z3 import (
-    And,
     Bool,
     Int,
     sat,
-    Or,
     Optimize,
     Not,
     Implies,
@@ -142,10 +140,7 @@ for i in range(n_cities):
 for i in range(n_flights):
     variables += [Bool(f"f_{i}")]
 
-n_nights = []
-
-for i in range(n_cities):
-    n_nights += [Int(f"n_{i}")]
+priceVar = Int("price")
 
 solver = Optimize()
 
@@ -161,11 +156,6 @@ for i in range(1, n_cities):
 for i in range(n_cities + 1, n_cities * 2):
     solver.add(Implies(variables[n_cities], variables[i]))
 
-for i in range(n_cities):
-    min_nights = cities[i]["min_nights"]
-    max_nights = cities[i]["max_nights"]
-    solver.add(And(min_nights <= n_nights[i], n_nights[i] <= max_nights))
-
 same_og = {}
 same_dest = {}
 same_date = {}
@@ -179,7 +169,6 @@ for i in range(n_flights):
     dateA = flightA["date"]
     og_city_clause = airport_to_clause(og_airport)
     dest_city_clause = airport_to_clause(dest_airport) + n_cities
-    dest_city_nights = airport_to_clause(dest_airport)
     dest_city = airport_to_city(dest_airport)
     cityA = airport_to_city(og_airport)
     min_nightsA = cityA["min_nights"]
@@ -232,15 +221,13 @@ for i in range(n_flights):
             ):
                 solver.add(Implies(variables[idA], Not(variables[idB])))
             # If I take a flight to city A, then a flight from city A that is not k nights after can't be true
-            nights = n_nights[dest_city_nights]
-            date_diff = (
-                datetime.strptime(flightB["date"], date_format)
-                - datetime.strptime(flightA["date"], date_format)
-            ).days
+            min_nightsB = airport_to_city(dest_airport)["min_nights"]
+            max_nightsB = airport_to_city(dest_airport)["max_nights"]
             if flightA["dest_airport"] == flightB["og_airport"]:
-                solver.add(
-                    Implies(And(variables[idA], variables[idB]), nights == date_diff)
-                )
+                if not between_k_nights(
+                    flightB["date"], min_nightsB, max_nightsB, flightA["date"]
+                ):
+                    solver.add(Implies(variables[idA], Not(variables[idB])))
 
 
 for x in same_og.values():
@@ -261,18 +248,6 @@ for i in range(n_cities * 2, len(variables)):
 
 solver.minimize(Sum(flight_price_weights))
 
-# for c in solver.assertions():
-#     print(c)
-
-
-# Function to extract current solution and create a blocking clause
-def get_blocking_clause(model, xs):
-    return Or([x != model.evaluate(x) for x in xs])
-
-
-solutions = []
-price = []
-
 
 def pretty_print_solution(solution):
     total_price = 0
@@ -291,26 +266,10 @@ def pretty_print_solution(solution):
             chosen_flights += (
                 f"{date} {og_city} {dest_city} {dep_time} {flight_price}\n"
             )
-    price.append(total_price)
     print(f"{total_price}\n{chosen_flights}".strip())
-
-
-def process_solutions(solution):
-    total_price = 0
-    for i in range(n_cities * 2, len(variables)):
-        if solution[i]:
-            flight = flights[i - n_cities * 2]
-            total_price += flight["price"]
-    price.append(total_price)
 
 
 if solver.check() == sat:
     model = solver.model()
     solution = [model.evaluate(x) for x in variables]
     pretty_print_solution(solution)
-    # process_solutions(solution)
-    # solutions.append(solution)
-    # solver.add(get_blocking_clause(model, variables))
-
-# min_solution = price.index(min(price))
-# pretty_print_solution(solutions[min_solution])
